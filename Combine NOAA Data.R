@@ -1,9 +1,6 @@
-library(dplyr)
+library(tidyverse)
+library(lubridate)
 library(reshape)
-library(stringr)
-library(tidyr)
-library(ggplot2)
-library(scales)
 
 df1 <- read.csv('Raw Data/1479393.csv', stringsAsFactors = FALSE, colClasses = c(DATE = "Date"))
 df2 <- read.csv('Raw Data/1479918.csv', stringsAsFactors = FALSE, colClasses = c(DATE = "Date"))
@@ -17,6 +14,31 @@ df9 <- read.csv('Raw Data/1480972.csv', stringsAsFactors = FALSE, colClasses = c
 
 all <- rbind(df1,df2,df3,df4,df5,df6,df7,df8,df9)
 
+metadata.columns = c(STNIDNUM    =  8, -1,
+                     RECTYPE     =  2, -1,
+                     COOPID      =  6, -1,
+                     CLIMDIV     =  2, -1,
+                     WBANID      =  5, -1,
+                     WMOID       =  5, -1,
+                     FAAID       =  4, -1,
+                     NWSID       =  5, -1,
+                     ICAOID      =  4, -1,
+                     COUNTRYNAME = 20, -1,
+                     STATEPROV   =  2, -1,
+                     COUNTY      = 30)
+
+stations.metadata = read.fwf('Raw Data/mshr_standard.txt',
+                             widths=metadata.columns,
+                             col.names=names(metadata.columns)[names(metadata.columns)!=''],
+                             colClasses=rep('character', 2),
+                             header=F,
+                             skip=1) %>%
+                    filter(!duplicated(COOPID)) # Only first occurance of any COOPID
+
+vt.stations = stations.metadata %>% filter(STATEPROV=='VT')
+
+unique(all$STATION)
+
 #levels(all$NAME)
 #levels(all$STATION)
 #unique(all$STATION)
@@ -29,6 +51,8 @@ all$TOBS_ATTRIBUTES <- NULL
 all$TOBS <- NULL
 all$TAVG_ATTRIBUTES <- NULL
 all$TAVG <- NULL
+
+
 
 
 glimpse(all)
@@ -51,3 +75,29 @@ table(keep_stations$STATION, strftime(keep_stations$DATE,format='%Y'))
 
 
 nrow(all[which(all$DATE == '2016-01-01'),])
+
+#' Append the county of each station
+#' 
+#' 
+find.county = Vectorize(function(coopid) {
+  str_trim(stations.metadata$COUNTY[which.max(stations.metadata$COOPID == coopid)])
+})
+
+keep_stations$COOPID = str_sub(keep_stations$STATION, -6)
+
+#' dplyr join in the metadata, for the counties
+keep_stations = keep_stations %>% left_join(stations.metadata, by='COOPID')
+
+#' The number of temperature readings, per year, for each COUNTY
+table(keep_stations$COUNTY, strftime(keep_stations$DATE,format='%Y'))
+
+#' Franklin County produces the most maple syrup, so needs the highest coverage
+table(strftime(keep_stations$DATE[str_trim(keep_stations$COUNTY)=='FRANKLIN'], format='%Y%m'))
+
+#' The number of days with below freezing temperatures for the *winter ending in the given year*
+below.freezing = keep_stations %>%
+  mutate(WINTER.YEAR = ifelse(month(DATE) < 6, year(DATE), year(DATE) + 1)) %>%
+  mutate(COUNTY = str_trim(COUNTY)) %>%
+  group_by(COUNTY, WINTER.YEAR) %>%
+  summarize(N.FREEZING = sum(TMIN < 32, na.rm=T))
+
