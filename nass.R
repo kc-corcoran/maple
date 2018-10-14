@@ -14,6 +14,8 @@ data = read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
        filter(Data.Item == 'MAPLE SYRUP - YIELD, MEASURED IN GALLONS / TAP') %>%
        filter(State == 'VERMONT')
 
+read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
+  filter(Program == 'SURVEY' & Geo.Level == 'STATE')
 #' The number of taps by county as a proportion of the total
 taps.by.county = read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
   filter(Program == 'CENSUS' & Geo.Level == 'COUNTY' & State=='VERMONT') %>%
@@ -40,28 +42,44 @@ read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
 #' Import NOAA: number of freezings weighted by county
 #' 
 
-# Insert missing years into number of taps by county
-df = taps.by.county %>%
+
+#' Insert missing years into number of taps by county
+freezing.scores = taps.by.county %>%
   group_by(County) %>%
   pad('year', by='Year', end_val=make_datetime(2018)) %>%
-  mutate(share = na.approx(share, rule=2), taps = na.approx(taps, rule=2)) # rule=2 state.approx: extrapolate max value
-
+  mutate(share = na.approx(share, rule=2), taps = na.approx(taps, rule=2)) %>% # rule=2 state.approx: extrapolate max value
 #' The "Freezing score" for the state of vermont, by year
-df2 = df %>%
   mutate(WINTER.YEAR = year(Year)) %>%
   inner_join(below.freezing, by=c(WINTER.YEAR='WINTER.YEAR', County='COUNTY')) %>%
-  mutate(Freeze.Score = share * N.FREEZING) %>%
-  group_by(WINTER.YEAR) %>%
-  summarize(Total.Freeze.Score = sum(Freeze.Score))
+#' We're going to take all the stats and combine them
+#' into a state-wide metric  
+  gather(key='key', value='value', -Year : -WINTER.YEAR) %>%
+  group_by(WINTER.YEAR, key) %>%
+  summarize(value = sum(value * share)) %>%
+  ungroup() %>%
+  mutate(key = paste0('COUNTY.WEIGHTED.',key)) %>%
+  spread(key, value) 
 
 #' Join the freezing score w/ the yield
-df3 = read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
+data = read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
   filter(Program == 'SURVEY' & Geo.Level == 'STATE') %>%
   filter(State == 'VERMONT') %>%
   filter(Data.Item == 'MAPLE SYRUP - YIELD, MEASURED IN GALLONS / TAP') %>%
   mutate(Year = make_datetime(Year)) %>%
   mutate(WINTER.YEAR = year(Year)) %>%
+  mutate(Value = as.numeric(as.character(Value))) %>%
   select(WINTER.YEAR, Yield=Value) %>%
-  inner_join(df2, by='WINTER.YEAR')
-  
+  inner_join(freezing.scores, by='WINTER.YEAR')
+pairs(~ Yield +
+        COUNTY.WEIGHTED.AVE.MAX +
+        COUNTY.WEIGHTED.N.DEFROST +
+        COUNTY.WEIGHTED.N.VERY.FREEZING, data)
+plot(data)
 
+write.csv(data, file='output/training.v2.csv', row.names=F)
+  
+#' Use tidyr to turn data into wide format
+df4 = read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
+  filter(Program == 'SURVEY' & Period == 'YEAR' & Geo.Level == 'STATE') %>%
+  select(Year, State, Data.Item, Value) %>%
+  spread(Data.Item, Value)
