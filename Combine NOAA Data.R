@@ -67,17 +67,61 @@ metadata.columns = c(STNIDNUM    =  8, -1,
                      STATEPROV   =  2, -1,
                      COUNTY      = 30)
 
+#' State codes
+states = read.fwf('Raw Data/ghcnd-states.txt', widths=c(2, -1, 1e2), col.names=c('STATEPROV','State'), header=F)
+
+#' Full station names (For looking up the station identifier...
+#' MSHR has the COOPID, NOT the  "GHCN Daily Identification Number". But they 
+#' are related, for example: If the GHCN number is ACW00011604, then the
+#' COOPID appears to be 011604---the last six characters)
+
+# IV. FORMAT OF "ghcnd-stations.txt"
+# 
+# ------------------------------
+# Variable   Columns   Type
+# ------------------------------
+# ID            1-11   Character
+# LATITUDE     13-20   Real
+# LONGITUDE    22-30   Real
+# ELEVATION    32-37   Real
+# STATE        39-40   Character
+# NAME         42-71   Character
+# GSN FLAG     73-75   Character
+# HCN/CRN FLAG 77-79   Character
+# WMO ID       81-85   Character
+# ------------------------------
+ghcnd.stations.columns = c(GHCNID       = 11, -1,
+                           LATITUDE     =  8, -1,
+                           LONGITUDE    =  9, -1,
+                           ELEVATION    =  6, -1,
+                           STATE        =  2, -1,
+                           NAME         = 40, -1,
+                           'GSN FLAG'   =  3, -1,
+                           'HCN/CRN FLAG' = 3, -1,
+                           'WMO ID'      = 5)
+ghcnd.stations = read.fwf('Raw Data/ghcnd-stations.txt',
+                          comment.char='', # This file contains a # symbol
+                          widths = ghcnd.stations.columns,
+                          col.names = names(ghcnd.stations.columns)[names(ghcnd.stations.columns)!=''],
+                          stringsAsFactors=F,
+                          header=F) %>%
+  mutate(COOPID = str_sub(GHCNID, -6))
+
 stations.metadata = read.fwf('Raw Data/mshr_standard.txt',
                              widths=metadata.columns,
                              col.names=names(metadata.columns)[names(metadata.columns)!=''],
+                             stringsAsFactors=F,
                              colClasses=rep('character', 2),
                              header=F,
                              skip=1) %>%
 #' Only first occurance of any COOPID
   filter(!duplicated(COOPID)) %>%
 #' Artifact of fixed-width metadata file
-  mutate(COUNTY = str_trim(COUNTY))
+  mutate(COUNTY = str_trim(COUNTY)) %>%
+  left_join(states, by='STATEPROV')
   
+write.csv(stations.metadata, file='Raw Data/mshr_standard.csv', row.names=F)
+
 #' Append the county of each station
 keep_stations %<>% mutate(COOPID = str_sub(STATION, -6)) %>%
 #' dplyr join in the metadata, for the counties
@@ -104,4 +148,4 @@ below.freezing = keep_stations %>%
             AVE.MAX = mean(TMAX, na.rm=T),
             N.DEFROST = sum(lag(TMAX, order_by=DATE) < 35 & TMIN >= 30, na.rm=T))
 
-
+df3=keep_stations %>% filter(COUNTY=='FRANKLIN')

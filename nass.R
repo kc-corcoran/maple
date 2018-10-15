@@ -9,22 +9,38 @@ library(padr) # Time series interpolation
 library(zoo)
 source('Combine NOAA Data.R')
 
+maple.raw = read.csv('Raw Data/All Public Maple Syrup Data.csv',
+                     stringsAsFactors=F,
+                     strip.white=T,
+                     na.strings=c('', ' ','(NA)','(D)')) # (D) means too small to count, but positive, or something
+
+total.maple = maple.raw %>%
+  filter(Program == 'SURVEY' & Geo.Level == 'STATE') %>%
+  filter(Data.Item == 'MAPLE SYRUP - PRODUCTION, MEASURED IN GALLONS') %>%
+  mutate(Value = as.numeric(gsub(',','',Value))) %>%
+  group_by(State) %>%
+  summarize(Total.Maple.Production = sum(Value))
+
+maple.states = unique(total.maple$State)
+
 data = read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
        filter(Program == 'SURVEY' & Geo.Level == 'STATE') %>%
        filter(Data.Item == 'MAPLE SYRUP - YIELD, MEASURED IN GALLONS / TAP') %>%
        filter(State == 'VERMONT')
 
-read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
-  filter(Program == 'SURVEY' & Geo.Level == 'STATE')
+# read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
+#   filter(Program == 'SURVEY' & Geo.Level == 'STATE')
+
 #' The number of taps by county as a proportion of the total
-taps.by.county = read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
-  filter(Program == 'CENSUS' & Geo.Level == 'COUNTY' & State=='VERMONT') %>%
+taps.by.county = maple.raw %>%
+  filter(Program == 'CENSUS' & Geo.Level == 'COUNTY') %>%
   filter(Data.Item == 'MAPLE SYRUP - NUMBER OF TAPS') %>%
   mutate(Year = make_datetime(Year)) %>%
   mutate(Value = as.numeric(gsub(',','',Value))) %>%
-  group_by(Year, County) %>%
+  group_by(Year, State, County) %>%
   summarize(taps = sum(Value)) %>%
-  mutate(share = taps / sum(taps))
+  mutate(share = taps / sum(taps, na.rm=T)) %>%
+  na.omit()
 
 #ggplot(aes(x=Year, y=share, group=County, fill=County)) + geom_bar(position='fill', stat='identity')
   
@@ -33,18 +49,13 @@ taps.by.county = read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
 # ggplot(data, aes(x=Year, y=taps, group=State, color=State)) + geom_bar(position='fill')
 
 
-read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
-  filter(Program == 'CENSUS' & Geo.Level == 'STATE' & State=='VERMONT') %>%
-  
-  select(Year)
-
-
 #' Import NOAA: number of freezings weighted by county
 #' 
 
 
 #' Insert missing years into number of taps by county
 freezing.scores = taps.by.county %>%
+  filter(State=='VERMONT') %>%
   group_by(County) %>%
   pad('year', by='Year', end_val=make_datetime(2018)) %>%
   mutate(share = na.approx(share, rule=2), taps = na.approx(taps, rule=2)) %>% # rule=2 state.approx: extrapolate max value
