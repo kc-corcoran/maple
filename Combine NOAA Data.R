@@ -139,6 +139,7 @@ table(strftime(keep_stations$DATE[str_trim(keep_stations$COUNTY)=='FRANKLIN'], f
 below.freezing = keep_stations %>%
   group_by(COUNTY, WINTER.YEAR) %>%
   summarize(N.FREEZING = sum(TMIN < 32, na.rm=T),
+            N.ABOVE.FREEZING = sum(TMAX > 32, na.rm=T),
             N.VERY.FREEZING = sum(TMIN < 22, na.rm=T),
             N.STAYS.FREEZING = sum(TMAX < 32, na.rm=T),
             N.STAYS.VERY.FREEZING = sum(TMAX < 22, na.rm=T),

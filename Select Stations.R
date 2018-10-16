@@ -6,6 +6,9 @@ library(readr)
 source('Combine NOAA Data.R')
 source('nass.R')
 
+
+
+
 #' The states with substantive maple production
 keep.states = total.maple %>%
   filter(!is.na(Total.Maple.Production)) %>%

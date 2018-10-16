@@ -94,3 +94,25 @@ df4 = read.csv('Raw Data/All Public Maple Syrup Data.csv') %>%
   filter(Program == 'SURVEY' & Period == 'YEAR' & Geo.Level == 'STATE') %>%
   select(Year, State, Data.Item, Value) %>%
   spread(Data.Item, Value)
+
+
+#' ## Production by county
+library(rgeos)
+library(maptools)
+
+library(maps)
+library(ggmap)
+
+map = map_data('county', region='vermont') %>%
+  mutate(region=subregion)
+
+
+maple.raw %>%
+  filter(Program == 'CENSUS' & Geo.Level == 'COUNTY') %>%
+  filter(Data.Item == 'MAPLE SYRUP - NUMBER OF TAPS') %>%
+  filter(State == 'VERMONT' & Year == 2012) %>%
+  mutate(Value = as.numeric(gsub(',','',Value))) %>%
+  ggplot(aes(fill=Value)) + geom_map(aes(map_id=tolower(County)), map=map, color='white') +
+  scale_fill_gradient(low = '#0000', high = "#00CC00") +
+  expand_limits(x=map$long, y=map$lat) +
+  theme_nothing()
